@@ -1,0 +1,51 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "setuptools_scm",
+]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "spicetools"
+dynamic = ["version"]
+authors = [
+    { name = "ysBach", email = "ysbach93@gmail.com" },
+]
+description = "Python package to do simple SPICE calculations for space missions."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = []
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "astropy",
+    "spiceypy",
+]
+
+
+[tool.setuptools_scm]
+write_to = "src/SPICEtools/_version.py"
+
+[project.urls]
+Homepage = "https://github.com/ysBach/SPICEtools"
+# Documentation = "https://github.com/ysBach/SPICEtools"
+Repository = "https://github.com/ysBach/SPICEtools"
+"Bug Tracker" = "https://github.com/ysBach/SPICEtools/issues"
+# Changelog = "https://github.com/ysBach/SPICEtools/CHANGELOG.md"
+
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
+xfail_strict = true
+# filterwarnings = ["error"]  # fails for astropy as of version 5.
+log_cli_level = "info"
+testpaths = [
+  "tests",
+]
