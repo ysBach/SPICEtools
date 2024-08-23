@@ -1,10 +1,6 @@
 src/spicetools/kernels/**/de*.bsp
 **/**.parq
-docs/_query_scripts*
-docs/_spk*
-docs/spkbsp
-docs/clut*
-docs/plut*
+docs/*
 
 
 # Byte-compiled / optimized / DLL files
