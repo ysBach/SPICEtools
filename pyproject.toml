@@ -30,7 +30,7 @@ dependencies = [
 
 
 [tool.setuptools_scm]
-write_to = "src/SPICEtools/_version.py"
+write_to = "src/spicetools/_version.py"
 
 [project.urls]
 Homepage = "https://github.com/ysBach/SPICEtools"
