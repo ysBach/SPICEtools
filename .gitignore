@@ -2,6 +2,7 @@ src/spicetools/kernels/**/de*.bsp
 **/**.parq
 docs/*
 
+src/spicetools/_version.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
