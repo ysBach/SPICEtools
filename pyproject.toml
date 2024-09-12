@@ -15,7 +15,7 @@ authors = [
 description = "Python package to do simple SPICE calculations for space missions."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = []
 classifiers = [
     "Intended Audience :: Science/Research",
