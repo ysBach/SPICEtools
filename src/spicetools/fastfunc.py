@@ -23,10 +23,10 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
     Returns
     -------
     spkgps_boosted : function
-        Boosted spkgps function. Input arguments are `targ` and `et`.
-        - `targ` must be prepared by `ctypes.c_int(int(spkid))`
-        - `et` must be prepared by `ctypes.c_double(et)` (use
-        `timeutil.times2et` with ``return_c=True``).
+        Boosted spkgps function. Input arguments are `targ` and `et` ::
+        - `targ` :  must be prepared by ``ctypes.c_int(int(spkid))``
+        - `et` : must be prepared by ``ctypes.c_double(et)`` (use
+            `timeutil.times2et` with ``return_c=True``).
     """
     ref = str2char_p(ref)
     obs = ctypes.c_int(obs)
@@ -43,7 +43,7 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
         def spkgps_boosted(targ, et):
             _lt = ctypes.c_double()
             _ptarg = empty_double_vector(3)
-            sp.libspice.spkgps_c(targ, et, ref, obs, _ptarg, _lt)
+            sp.libspice.spkgps_c(targ, et, ref, obs, _ptarg, ctypes.byref(_lt))
             return np.frombuffer(_ptarg).copy(), _lt.value
 
     return spkgps_boosted
@@ -51,6 +51,7 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
 
 def spkcvo(outref: str, refloc: str, abcorr: str, obsctr: str, obsref: str, dummy_lt: bool = True):
     """Return boosted spkcvo function.
+
     Parameters
     ----------
     outref : str
@@ -69,11 +70,12 @@ def spkcvo(outref: str, refloc: str, abcorr: str, obsctr: str, obsref: str, dumm
     Returns
     -------
     spkcvo_boosted : function
-        Boosted spkcvo function. Input arguments are `target`, `obssta`, and `et`.
-        - `target` must be prepared by `str2char_p(str(spkid))`
+        Boosted spkcvo function. Input arguments are `target`, `obssta`, and
+        `et`::
+        - `target` must be prepared by ``str2char_p(str(spkid))``
         - `obssta` must be prepared by ``sp.stypes.to_double_vector(state)``
         - `et` must be prepared by `ctypes.c_double(et)` (use
-        `timeutil.times2et` with ``return_c=True``).
+            `timeutil.times2et` with ``return_c=True``).
     """
     outref = str2char_p(outref)
     refloc = str2char_p(refloc)
@@ -96,11 +98,11 @@ def spkcvo(outref: str, refloc: str, abcorr: str, obsctr: str, obsref: str, dumm
             return np.frombuffer(state).copy()
     else:
         def spkcvo_boosted(target, obssta, et):
-            _lt = ctypes.byref(ctypes.c_double())
+            _lt = ctypes.c_double()
             state = empty_double_vector(6)
             sp.libspice.spkcvo_c(
                 target, et, outref, refloc, abcorr, obssta, et,
-                obsctr, obsref, state, _lt
+                obsctr, obsref, state, ctypes.byref(_lt)
             )
             return np.frombuffer(state).copy(), _lt.value
 

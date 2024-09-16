@@ -6,8 +6,12 @@ __all__ = ['empty_double_vector', 'str2char_p']
 
 
 def str2char_p(spkid):
-    '''Quick `string_to_char_p` when input is convertible to string.
-    Original code:
+    '''Quick `sp.string_to_char_p` when input is convertible to string.
+
+    Notes
+    -----
+    Original code from spiceypy::
+
     def string_to_char_p(inobject, inlen=None):
         """
         convert a python string to a char_p
@@ -33,7 +37,11 @@ def str2char_p(spkid):
 
 def empty_double_vector(n):
     '''Quick `empty_double_vector` when input is python int.
-    Original code:
+
+    Notes
+    -----
+    Original code from spiceypy::
+
     def empty_double_vector(n):
         if isinstance(n, c_int):
             n = n.value

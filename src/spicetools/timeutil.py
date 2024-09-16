@@ -28,12 +28,16 @@ def times2et(times, return_c=False, **kwargs):
 
     ets_c : list
         List of ET values as ``ctypes.c_double``.
+        Returned only if `return_c` is `True`.
     """
     times = Time(times, **kwargs)
     if return_c:
         ets = []
         ets_c = []
-        for _t in times.iso:
+        times_iso = times.iso
+        if isinstance(times_iso, str):
+            times_iso = [times_iso]
+        for _t in times_iso:
             _et = sp.str2et(_t)
             _etc = ctypes.c_double(_et)
             ets.append(_et)
