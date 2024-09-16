@@ -23,10 +23,10 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
     Returns
     -------
     spkgps_boosted : function
-        Boosted spkgps function. Input arguments are `targ` and `et`.
-        - `targ` must be prepared by `ctypes.c_int(int(spkid))`
-        - `et` must be prepared by `ctypes.c_double(et)` (use
-        `timeutil.times2et` with ``return_c=True``).
+        Boosted spkgps function. Input arguments are `targ` and `et` ::
+        - `targ` :  must be prepared by ``ctypes.c_int(int(spkid))``
+        - `et` : must be prepared by ``ctypes.c_double(et)`` (use
+            `timeutil.times2et` with ``return_c=True``).
     """
     ref = str2char_p(ref)
     obs = ctypes.c_int(obs)
@@ -51,6 +51,7 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
 
 def spkcvo(outref: str, refloc: str, abcorr: str, obsctr: str, obsref: str, dummy_lt: bool = True):
     """Return boosted spkcvo function.
+
     Parameters
     ----------
     outref : str
@@ -69,11 +70,12 @@ def spkcvo(outref: str, refloc: str, abcorr: str, obsctr: str, obsref: str, dumm
     Returns
     -------
     spkcvo_boosted : function
-        Boosted spkcvo function. Input arguments are `target`, `obssta`, and `et`.
-        - `target` must be prepared by `str2char_p(str(spkid))`
+        Boosted spkcvo function. Input arguments are `target`, `obssta`, and
+        `et`::
+        - `target` must be prepared by ``str2char_p(str(spkid))``
         - `obssta` must be prepared by ``sp.stypes.to_double_vector(state)``
         - `et` must be prepared by `ctypes.c_double(et)` (use
-        `timeutil.times2et` with ``return_c=True``).
+            `timeutil.times2et` with ``return_c=True``).
     """
     outref = str2char_p(outref)
     refloc = str2char_p(refloc)
