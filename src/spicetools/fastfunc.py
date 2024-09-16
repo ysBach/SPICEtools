@@ -43,7 +43,7 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
         def spkgps_boosted(targ, et):
             _lt = ctypes.c_double()
             _ptarg = empty_double_vector(3)
-            sp.libspice.spkgps_c(targ, et, ref, obs, _ptarg, _lt)
+            sp.libspice.spkgps_c(targ, et, ref, obs, _ptarg, ctypes.byref(_lt))
             return np.frombuffer(_ptarg).copy(), _lt.value
 
     return spkgps_boosted
@@ -96,11 +96,11 @@ def spkcvo(outref: str, refloc: str, abcorr: str, obsctr: str, obsref: str, dumm
             return np.frombuffer(state).copy()
     else:
         def spkcvo_boosted(target, obssta, et):
-            _lt = ctypes.byref(ctypes.c_double())
+            _lt = ctypes.c_double()
             state = empty_double_vector(6)
             sp.libspice.spkcvo_c(
                 target, et, outref, refloc, abcorr, obssta, et,
-                obsctr, obsref, state, _lt
+                obsctr, obsref, state, ctypes.byref(_lt)
             )
             return np.frombuffer(state).copy(), _lt.value
 
