@@ -32,6 +32,11 @@ handle = sp.furnsh(TEST_META_FILE)
     ]
 )
 def test_times2et(times, et_expected, etc_expected):
+    # Without return_c
+    times, et = times2et(times, return_c=False)
+    np.testing.assert_array_almost_equal(et, et_expected)
+
+    # With return_c
     times, et, etc = times2et(times, return_c=True)
     np.testing.assert_array_almost_equal(et, et_expected)
     for expected, actual in zip(etc_expected, etc):
