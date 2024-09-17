@@ -22,6 +22,14 @@ def download_jpl_de(dename="de440s", output=None, overwrite=False):
         If `True`, overwrite the existing file if it exists. Default is
         `False`, i.e., not download any file but returns the path to the
         existing one.
+
+    Returns
+    -------
+    output : pathlib.Path
+        Path to the downloaded or existing ephemeris file.
+
+    existed : bool
+        `True` if the file already existed, `False` if it was downloaded.
     """
     if not dename.endswith(".bsp"):
         dename += ".bsp"
@@ -33,7 +41,7 @@ def download_jpl_de(dename="de440s", output=None, overwrite=False):
         output = Path(output)
 
     if output.exists() and not overwrite:
-        return output
+        return output, True
 
     # Download the file
     url = f"https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/{dename}"
@@ -43,4 +51,4 @@ def download_jpl_de(dename="de440s", output=None, overwrite=False):
         f.write(response.read())
 
     print(f"Downloaded {dename} to {output}")
-    return output
+    return output, False

@@ -12,9 +12,10 @@ import pytest
     ]
 )
 def test_download_jpl_de(dename, expected_output):
-    output_path = download_jpl_de(dename, overwrite=True)
+    output_path, existed = download_jpl_de(dename, overwrite=True)
+    assert isinstance(output_path, Path)
     assert str(output_path) == str(expected_output)
-    assert Path(output_path).exists()
+    assert output_path.exists()
 
     with open(output_path, 'rb') as ff:
         l0 = ff.readline()
@@ -23,3 +24,7 @@ def test_download_jpl_de(dename, expected_output):
 
     assert l0.startswith(b"DAF/SPK")
     assert l2.split(b"\x00\x00JPL planetary and lunar ephemeris ")[1].startswith(b"DE440")
+
+    if not existed:
+        # Clean up the downloaded file if it was just downloaded
+        output_path.unlink()
