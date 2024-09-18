@@ -1,11 +1,10 @@
 import base64
-import json
 from pathlib import Path
 from urllib import request
 
 import requests
 
-__all__ = ["download_jpl_de", "SBDBQuery", "horizons_spk_query_url", "horizons_spk_query"]
+__all__ = ["SBDBQuery", "HorizonsSPKQuery", "download_jpl_de"]
 
 
 def _ordered_subtract(list1, list2):
@@ -407,3 +406,69 @@ class SBDBQuery:
             self.data = data["data"]
         # self.df = pd.DataFrame(self.data, columns=self.fields)
 
+
+class HorizonsSPKQuery:
+    """Class to handle JPL Horizons SPK queries."""
+
+    def __init__(self, command, start=None, stop=None, obj_data=False, output=None):
+        """ Get SPK query parameters for JPL Horizons.
+
+        Parameters
+        ----------
+        command : str
+            The ``COMMAND`` parameter in Horizons Query API. See the
+            ``COMMAND`` Parameter section in this link for the details
+            https://ssd-api.jpl.nasa.gov/doc/horizons.html#ephem_type
+            For small bodies, it should generally be ending with a semicolon
+            (``";"``), and in the format of one of these::
+            - ``"<astnum>;"``, e.g., ``"99942;"``
+            - ``"<name>;"`` (e.g., ``"Apophis;"``),
+            - ``"DES=<des>;"`` (e.g., ``"DES=1999 AN10;"``).
+            - ``"DES=<spkid>;"`` (e.g., ``"DES=20099942;"``).
+
+        start, stop : str, optional
+            Start and stop times of the query in ISO format. If not provided, the
+            current time and one day later will be used (the default setting of
+            Horizons API).
+
+        obj_data : bool, optional
+            If `True`, include object data in the SPK file.
+
+        """
+        self.base_url = "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&EPHEM_TYPE=SPK"
+        if not isinstance(command, str):
+            raise TypeError("`command` must be str")
+
+        self._params = {
+            "COMMAND": command,
+            "START_TIME": start,
+            "STOP_TIME": stop,
+            "OBJ_DATA": 'YES' if obj_data else 'NO'
+        }
+
+        self.output = output
+
+    def query(self, decode=True):
+        response = requests.get(self.base_url, params=self._params)
+        self.url = response.url
+        if not response.ok:
+            raise ValueError(f"Query failed: {response.text}")
+
+        data = response.json()
+        if data["signature"]["version"] != "1.2":
+            raise ValueError(f"Only ver 1.2 is supported but got {data['signature']['version']=}")
+
+        # If the request was valid...
+        try:
+            self.spk = data["spk"]
+            if not self.spk.startswith("REFGL1NQ"):
+                raise ValueError("Invalid SPK data: It does not start with REFGL1NQ (DAF/SPK).")
+            if decode:
+                self.spk = base64.b64decode(self.spk)
+        except KeyError:
+            raise ValueError(f"The key 'spk' is not found in the response: {data}")
+
+        if self.output is not None:
+            with open(self.output, "wb" if decode else "w") as f:
+                f.write(self.spk)
+            # Logger.log(f"SPK data written to {self.output}")
