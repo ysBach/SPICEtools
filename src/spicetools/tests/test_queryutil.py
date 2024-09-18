@@ -1,5 +1,5 @@
 from pathlib import Path
-from spicetools.queryutil import download_jpl_de
+from spicetools.queryutil import download_jpl_de, SBDBQuery
 import spicetools as spt
 
 import pytest
@@ -28,3 +28,12 @@ def test_download_jpl_de(dename, expected_output):
     if not existed:
         # Clean up the downloaded file if it was just downloaded
         output_path.unlink()
+
+
+# Just a very simple test only
+def test_SBDBQuery():
+    sbdb = spt.SBDBQuery(fields="spkid,pdes,", limit=3)
+    sbdb.query()
+    assert len(sbdb.df) == 3
+    assert sbdb.df["spkid"].tolist() == [20000001, 20000002, 20000003]
+    assert sbdb.df["pdes"].tolist() == ["1", "2", "3"]
