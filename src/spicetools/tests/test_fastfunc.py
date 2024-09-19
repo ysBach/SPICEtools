@@ -11,30 +11,39 @@ from spicetools.fastfunc import spkcvo, spkgps
 from spicetools.kernelutil import make_meta
 from spicetools.queryutil import download_jpl_de
 
-de_path, de_existed = download_jpl_de("de440s", overwrite=False)  # avoid redownloading
-
-FILES = [
-    "$KERNELS/lsk/naif0012.tls",
-    "$KERNELS/pck/gm_de440.tpc",
-    "$KERNELS/pck/pck00011.tpc",
-    "$KERNELS/de440s.bsp",
-    "$KERNELS/tests/spk3200_19991201-20010101_retrieved20240916.bsp"
-]
-TEST_META_FILE = "test_meta.mk"
 SPEEDOFLIGHT = 299792458.0/1000  # km/s
-make_meta(*FILES, output=TEST_META_FILE)
-handle = sp.furnsh(TEST_META_FILE)
 ET_2000VE = 6868864.185613286  # ET for 2000-03-21T12:00:00
+
+
+@pytest.fixture(scope="module")
+def setup_mkfile(tmp_path_factory):
+    """
+    Setup the test module by creating a kernel meta file and loading the kernels.
+    """
+    outde = tmp_path_factory.mktemp("de") / "de440s.bsp"
+    outmk = tmp_path_factory.mktemp("mk") / "test.mk"
+    FILES = [
+        str(outde),
+        "$KERNELS/lsk/naif0012.tls",
+        "$KERNELS/tests/spk3200_19991201-20010101_retrieved20240916.bsp",
+        # "$KERNELS/pck/gm_de440.tpc",
+        # "$KERNELS/pck/pck00011.tpc",
+    ]
+    _, _ = download_jpl_de("de440s", overwrite=False, output=outde)
+    make_meta(*FILES, output=outmk)
+    sp.furnsh(str(outmk))
+    return str(outmk)
 
 
 @pytest.mark.parametrize("ref", ["J2000", "ECLIPJ2000"])
 @pytest.mark.parametrize("obs", [399, 301, 10, 20003200])
 @pytest.mark.parametrize("et", [0.0, 100, 10000, ET_2000VE])
-def test_spkgps_0(ref, obs, et):
+def test_spkgps_0(setup_mkfile, ref, obs, et):
     """
     Test the spkgps function with/without dummy lt.
     Case where state should be all 0s because target == observer
     """
+    sp.furnsh(setup_mkfile)
     # Define the inputs
     _targ = ctypes.c_int(obs)  # Target body == observer
     _et = ctypes.c_double(et)  # ET (SPICE time)
@@ -72,7 +81,7 @@ def test_spkgps_0(ref, obs, et):
          [1.49011707e+08, 1.78355250e+06, 2.13328441e+02]),
     ]
 )
-def test_spkgps_non0(ref, obs, targ, et, state_expected):
+def test_spkgps_non0(setup_mkfile, ref, obs, targ, et, state_expected):
     """
     Test the spkgps function with/without dummy lt.
     Test cases are :
@@ -80,6 +89,7 @@ def test_spkgps_non0(ref, obs, targ, et, state_expected):
     - Sun viewed from Earth at 2000-03-21 (ET=ET_2000VE)
     all at two reference frames: J2000 and ECLIPJ2000.
     """
+    sp.furnsh(setup_mkfile)
     # Define the inputs
     _target = ctypes.c_int(targ)  # Target body (Sun)
     _et = ctypes.c_double(et)
@@ -113,11 +123,12 @@ def test_spkgps_non0(ref, obs, targ, et, state_expected):
 @pytest.mark.parametrize("obsctr", ["399", "10"])
 @pytest.mark.parametrize("obsref", ["J2000", "ECLIPJ2000"])
 @pytest.mark.parametrize("et", [0.0, 100, 10000, ET_2000VE])
-def test_spkcvo_0(outref, refloc, abcorr, obsctr, obsref, et):
+def test_spkcvo_0(setup_mkfile, outref, refloc, abcorr, obsctr, obsref, et):
     """
     Test the spkcvo function with/without dummy lt.
     Case where state should be all 0s because target == observer
     """
+    sp.furnsh(setup_mkfile)
     # Define the inputs
     _targ = sp.stypes.string_to_char_p(obsctr)
     obssta = sp.stypes.to_double_vector(np.zeros(6))
@@ -127,12 +138,20 @@ def test_spkcvo_0(outref, refloc, abcorr, obsctr, obsref, et):
     spkcvo_boosted = spkcvo(outref, refloc, abcorr, obsctr, obsref, dummy_lt=True)
 
     state = spkcvo_boosted(_targ, obssta, _et)
+    # from spicetools.type
+    # outref = str2char_p(outref)
+    # refloc = str2char_p(refloc)
+    # abcorr = str2char_p(abcorr)
+    # obsctr = str2char_p(obsctr)
+    # obsref = str2char_p(obsref)
+    # state = sp.spkcvo(obsctr, et, outref, refloc, abcorr, np.zeros(6), et, obsctr, obsref)[0]
     np.testing.assert_allclose(state, np.zeros(6), rtol=1e-5, atol=1e-5)
 
     # === using lt
     spkcvo_boosted = spkcvo(outref, refloc, abcorr, obsctr, obsref, dummy_lt=False)
 
     state, lt = spkcvo_boosted(_targ, obssta, _et)
+    # state, lt = sp.spkcvo(obsctr, et, outref, refloc, abcorr, np.zeros(6), et, obsctr, obsref)
     np.testing.assert_allclose(state, np.zeros(6), rtol=1e-5, atol=1e-5)
     np.testing.assert_almost_equal(lt, 0.0)
 
@@ -156,7 +175,8 @@ _spkcvo_obssta = df_spkcvo_non0_cases[[f"obssta{i}" for i in range(6)]].values
         _spkcvo_sta
     )
 )
-def test_spkcvo_non0(outref, refloc, abcorr, obsctr, obsref,
+def test_spkcvo_non0(setup_mkfile,
+                     outref, refloc, abcorr, obsctr, obsref,
                      et, obssta, state_expected):
     """
     The test cases for spkcvo function with non-zero state.
@@ -195,6 +215,7 @@ def test_spkcvo_non0(outref, refloc, abcorr, obsctr, obsref,
         pd.DataFrame.from_dict(resdict).to_csv("spkcvo_test_cases.csv", index=False)
         ```
     """
+    sp.furnsh(setup_mkfile)
     # Define the inputs
     _targ = sp.stypes.string_to_char_p("20003200")
     _et = ctypes.c_double(et)
@@ -215,10 +236,3 @@ def test_spkcvo_non0(outref, refloc, abcorr, obsctr, obsref,
     np.testing.assert_allclose(state, state_expected, rtol=1e-5, atol=0.001)
     lt_expected = np.linalg.norm(state_expected[:3]) / SPEEDOFLIGHT
     np.testing.assert_almost_equal(lt, lt_expected, decimal=6)
-
-
-# delete the temporary meta kernel file after tests
-os.remove(TEST_META_FILE)  # Clean up the test files
-if not de_existed:
-    # Clean if it is downloaded from this test
-    os.remove(de_path)
