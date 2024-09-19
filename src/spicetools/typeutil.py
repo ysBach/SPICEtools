@@ -1,4 +1,3 @@
-import spiceypy as sp
 import ctypes
 
 
@@ -32,7 +31,9 @@ def str2char_p(spkid):
             return c_char_p(inobject.encode(encoding="utf-8"))
         return c_char_p(inobject.encode(encoding="UTF-8"))
     '''
-    return sp.support_types.c_char_p(str(spkid).encode(encoding="UTF-8"))
+    return ctypes.c_char_p(str(spkid).encode(encoding="UTF-8"))
+    # _str = str(spkid)
+    # return ctypes.create_string_buffer(_str.encode(encoding="UTF-8"), len(_str))
 
 
 def empty_double_vector(n):
