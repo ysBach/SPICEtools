@@ -170,7 +170,7 @@ def download_jpl_de(dename="de440s", output=None, overwrite=False):
     with open(output, 'wb') as f:
         f.write(response.read())
 
-    print(f"Downloaded {dename} to {output}")
+    # print(f"Downloaded {dename} to {output}")
     return output, False
 
 
@@ -440,7 +440,7 @@ class HorizonsSPKQuery:
             raise TypeError("`command` must be str")
 
         self._params = {
-            "COMMAND": command,
+            "COMMAND": f"'{command}'",
             "START_TIME": start,
             "STOP_TIME": stop,
             "OBJ_DATA": 'YES' if obj_data else 'NO'
