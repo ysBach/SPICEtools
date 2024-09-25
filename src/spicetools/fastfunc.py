@@ -50,7 +50,7 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
 
 
 def spkcvo(outref: str, refloc: str, abcorr: str, obsctr: str, obsref: str, dummy_lt: bool = True):
-    """Return boosted spkcvo function.
+    """Return boosted spkcvo function with obsepc = et.
 
     Parameters
     ----------

@@ -1,5 +1,6 @@
 import ctypes
 
+import numpy as np
 import spiceypy as sp
 from astropy.time import Time
 
@@ -30,14 +31,11 @@ def times2et(times, return_c=False, **kwargs):
         List of ET values as ``ctypes.c_double``.
         Returned only if `return_c` is `True`.
     """
-    times = Time(times, **kwargs)
+    times = Time(np.atleast_1d(times), **kwargs)
     if return_c:
         ets = []
         ets_c = []
-        times_iso = times.iso
-        if isinstance(times_iso, str):
-            times_iso = [times_iso]
-        for _t in times_iso:
+        for _t in times.iso:
             _et = sp.str2et(_t)
             _etc = ctypes.c_double(_et)
             ets.append(_et)
