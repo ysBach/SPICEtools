@@ -32,19 +32,19 @@ def spkgps(ref: str, obs: int, dummy_lt: bool = True):
     obs = ctypes.c_int(obs)
 
     if dummy_lt:
-        _lt = ctypes.byref(ctypes.c_double())
+        _lt = ctypes.c_double()
 
         def spkgps_boosted(targ, et):
             _ptarg = empty_double_vector(3)
-            sp.libspice.spkgps_c(targ, et, ref, obs, _ptarg, _lt)
-            return np.frombuffer(_ptarg).copy()
+            sp.libspice.spkgps_c(targ, et, ref, obs, _ptarg, ctypes.byref(_lt))
+            return np.frombuffer(_ptarg, dtype=np.float64).copy()
 
     else:
         def spkgps_boosted(targ, et):
             _lt = ctypes.c_double()
             _ptarg = empty_double_vector(3)
             sp.libspice.spkgps_c(targ, et, ref, obs, _ptarg, ctypes.byref(_lt))
-            return np.frombuffer(_ptarg).copy(), _lt.value
+            return np.frombuffer(_ptarg, dtype=np.float64).copy(), _lt.value
 
     return spkgps_boosted
 
