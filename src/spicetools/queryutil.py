@@ -1,128 +1,168 @@
 import base64
 from pathlib import Path
 from urllib import request
+import pandas as pd
+import numpy as np
+from io import StringIO
 
 import requests
 
-__all__ = ["SBDBQuery", "HorizonsSPKQuery", "download_jpl_de"]
+__all__ = ["SBDBQuery", "drop_impacted", "HorizonsSPKQuery", "download_jpl_de", "sanitize_comets"]
+
+# impacted and permanently lost objects by 2024:
+# see also https://en.wikipedia.org/wiki/Asteroid_impact_prediction#List_of_successfully_predicted_asteroid_impacts
+IMPACTED = [
+    # Asteroids
+    "2008 TC3",  # On Earth at 2008-10-07T02:48:50.400+00:00
+    "2014 AA",  # On Earth at 2014-01-02T02:30:35.086+00:00
+    "2018 LA",  # On Earth at 2018-06-02T16:48:08.746+00:00
+    "2019 MO",  # On Earth at 2019-06-22T21:29:24.866+00:00
+    "2022 EB5",  # On Earth at 2022-03-11T21:25:49.509+00:00
+    "2022 WJ1",  # On Earth at 2022-11-19T08:33:48.418+00:00
+    "2023 CX1",  # On Earth at 2023-02-13T03:07:11.999+00:00
+    "2024 BX1",  # On Earth at 2024-01-21T00:37:09.875+00:00
+    "2024 RW1",  # On Earth at 2024-09-04T16:42:09.431+00:00
+    "2024 UQ",  # On Earth at 2024-10-22T10:55:07.739+00:00
+    # Comets
+    "1981 V1",  # On Sun at 1981-11-04T12:45:12.615+00:00
+    "1997 T2",  # On Sun at 1997-10-04T07:39:44.815+00:00
+    "2002 X14",  # On Sun at 2002-12-12T07:10:55.815+00:00
+    "1989 N3",  # On Sun at 1989-07-08T18:30:44.615+00:00
+    "2003 K9",  # On Sun at 2003-05-24T20:51:43.816+00:00
+    "2003 L8",  # On Sun at 2003-06-16T02:08:31.815+00:00
+    "2003 M1",  # On Sun at 2003-06-16T15:06:07.815+00:00
+    "2003 M2",  # On Sun at 2003-06-18T21:34:55.815+00:00
+    "2003 M3",  # On Sun at 2003-06-18T09:20:31.816+00:00
+    "2001 M8",  # On Sun at 2001-06-27T12:56:31.816+00:00
+    "2008 C7",  # On Sun at 2008-02-09T21:34:54.815+00:00
+    "2007 M5",  # On Sun at 2007-06-25T12:42:06.815+00:00
+    "2007 V4",  # On Sun at 2007-11-03T19:32:30.815+00:00
+    "2008 D9",  # On Sun at 2008-03-01T02:43:04.416+00:00
+    "2008 H3",  # On Sun at 2008-04-17T06:27:42.816+00:00
+    "2007 X10",  # On Sun at 2007-12-14T10:46:54.816+00:00
+    "2008 J14",  # On Sun at 2008-05-14T09:34:54.815+00:00
+    "2005 L7",  # On Sun at 2005-06-07T08:51:43.816+00:00
+    "2005 L9",  # On Sun at 2005-06-07T09:49:19.816+00:00
+    "2005 W16",  # On Sun at 2005-11-29T04:03:43.815+00:00
+    "2005 L12",  # On Sun at 2005-06-12T16:32:31.815+00:00
+    "2005 X5",  # On Sun at 2005-12-09T10:03:43.815+00:00
+    "2004 Q6",  # On Sun at 2004-08-26T21:20:31.816+00:00
+    "2007 E4",  # On Sun at 2007-03-03T11:30:06.816+00:00
+    "2005 Y9",  # On Sun at 2005-12-27T17:58:55.815+00:00
+    "2006 A5",  # On Sun at 2006-01-05T15:49:18.816+00:00
+    "2006 X7",  # On Sun at 2006-12-12T17:30:06.816+00:00
+]
 
 
-def _ordered_subtract(list1, list2):
-    """Return a list with elements of list2 removed from list1, preserving order."""
-    return [item for item in list1 if item not in list2]
+def drop_impacted(df, desig_col="desig"):
+    """Drop impacted objects from the DataFrame."""
+    return df[~df[desig_col].isin(IMPACTED)].reset_index(drop=True)
+
+# TODO: Eventually some of these may be moved to astroquery.jplsbdb
 
 
-SBDB_FIELDS = {
-    "*": [
-        # === object (Object Fields)
-        "spkid"   ,  # object primary SPK-ID
-        "full_name",  # object full name/designation
-        "kind"    ,  # see below
-        "pdes"    ,  # object primary designation
-        "name"    ,  # object IAU name
-        "prefix"  ,  # comet designation prefix
-        "neo"     ,  # [Y/N] Near-Earth Object (NEO) flag
-        "pha"     ,  # [Y/N] Potentially Hazardous Asteroid (PHA) flag
-        "sats"    ,  # Number of known satellites
-        # === phys_par (Physical Parameter Fields)
-        "H"       ,  # absolute magnitude parameter
-        "G"       ,  # magnitude slope parameter (default is 0.15)
-        "M1"      ,  # comet total magnitude parameter
-        "M2"      ,  # comet nuclear magnitude parameter
-        "K1"      ,  # comet total magnitude slope parameter
-        "K2"      ,  # comet nuclear magnitude slope parameter
-        "PC"      ,  # comet nuclear magnitude law - phase coefficient
-        "S0"      ,  # ??
-        "S0_sigma",  # ??
-        "diameter",  # [km] object diameter (from equivalent sphere)
-        "extent"  ,  # [km] object bi/tri-axial ellipsoid dimensions
-        "albedo"  ,  # geometric albedo
-        "rot_per" ,  # [h] rotation period (synodic)
-        "pole"    ,  # [deg] spin-pole direction in R.A./Dec.
-        "GM"      ,  # [km^3/s^2] standard gravitational parameter
-        "density" ,  # [g/cm^3] bulk density
-        "BV"      ,  # color index B-V magnitude difference
-        "UB"      ,  # color index U-B magnitude difference
-        "IR"      ,  # color index I-R magnitude difference
-        "spec_B"  ,  # [SMASSII] spectral taxonomic type
-        "spec_T"  ,  # [Tholen] spectral taxonomic type
-        "H_sigma" ,  # 1-sigma uncertainty in absolute magnitude H
-        "diameter_sigma",  # [km] 1-sigma uncertainty in object diameter
-        # === orbit (Orbit and Model Parameter Fields)
-        "orbit_id",  # orbit solution ID
-        "epoch"   ,  # [TDB] epoch of osculation in Julian day form
-        "epoch_mjd",  # [TDB] epoch of osculation in modified Julian day form
-        "epoch_cal",  # [TDB] epoch of osculation in calendar date/time form
-        "equinox" ,  # equinox of reference frame
-        "e"       ,  # eccentricity
-        "a"       ,  # [au] semi-major axis
-        "q"       ,  # [au] perihelion distance
-        "i"       ,  # [deg] inclination; angle with respect to x-y ecliptic plane
-        "om"      ,  # [deg] longitude of the ascending node
-        "w"       ,  # [deg] argument of perihelion
-        "ma"      ,  # [deg] mean anomaly
-        "ad"      ,  # [au] aphelion distance
-        "n"       ,  # [deg/d] mean motion
-        "tp"      ,  # [TDB] time of perihelion passage
-        "tp_cal"  ,  # [TDB] time of perihelion passage
-        "per"     ,  # [d] sidereal orbital period
-        "per_y"   ,  # [years] sidereal orbital period
-        "moid"    ,  # [au] Earth Minimum Orbit Intersection Distance
-        "moid_ld" ,  # [LD] Earth Minimum Orbit Intersection Distance
-        "moid_jup",  # [au] Jupiter Minimum Orbit Intersection Distance
-        "t_jup"   ,  # Jupiter Tisserand Invariant
-        "sigma_e" ,  # eccentricity (1-sigma uncertainty)
-        "sigma_a" ,  # [au] semi-major axis (1-sigma uncertainty)
-        "sigma_q" ,  # [au] perihelion distance (1-sigma uncertainty)
-        "sigma_i" ,  # [deg] inclination (1-sigma uncertainty)
-        "sigma_om",  # [deg] long. of the asc. node (1-sigma uncertainty)
-        "sigma_w" ,  # [deg] argument of perihelion (1-sigma uncertainty)
-        "sigma_ma",  # [deg] mean anomaly (1-sigma uncertainty)
-        "sigma_ad",  # [au] aphelion distance (1-sigma uncertainty)
-        "sigma_n" ,  # [deg/d] mean motion (1-sigma uncertainty)
-        "sigma_tp",  # [d] time of peri. passage (1-sigma uncertainty)
-        "sigma_per",  # [d] sidereal orbital period (1-sigma uncertainty)
-        "class"   ,  # orbit classification
-        "source"  ,  # see below
-        "soln_date",  # date/time of orbit determination (YYYY-MM-DD hh:mm:ss, Pacific Local)
-        "producer",  # name of person (or institution) who computed the orbit
-        "data_arc",  # [d] number of days spanned by the data-arc
-        "first_obs",  # [UT] date of first observation used in the orbit fit
-        "last_obs",  # [UT] date of last observation used in the orbit fit
-        "n_obs_used",  # number of observations (all types) used in fit
-        "n_del_obs_used",  # number of delay-radar observations used in fit
-        "n_dop_obs_used",  # number of Doppler-radar observations used in fit
-        "pe_used" ,  # JPL internal ID of the planetary ephemeris used in the OD
-        "sb_used" ,  # JPL internal ID of the small-body ephemeris used in the OD
-        "condition_code",  # orbit condition code (MPC 'U' parameter)
-        "rms"     ,  # [arcsec] normalized RMS of orbit fit
-        "two_body",  # [T/F] 2-body dynamics used flag
-        "A1"      ,  # non-grav. radial parameter
-        "A1_sigma",  # non-grav. radial parameter (1-sigma uncertainty)
-        "A2"      ,  # non-grav. transverse parameter
-        "A2_sigma",  # non-grav. transverse parameter (1-sigma uncertainty)
-        "A3"      ,  # non-grav. normal parameter
-        "A3_sigma",  # non-grav. normal parameter (1-sigma uncertainty)
-        "DT"      ,  # [d] non-grav. peri.-maximum offset
-        "DT_sigma",  # [d] non-grav. peri.-maximum offset (1-sigma uncertainty)
-    ],
-    # "kind" : indicates whether asteroid (a) or comet (c) and whether numbered (n)
-    # or unnumbered (u); for example a value of an indicates a numbered asteroid
-    # and cu indicates an unnumbered comet
-    # "source": code indicating the source of the orbit: ORB=”JPL orbit
-    # file”, MPC:mpn=”MPC numbered asteroid orbit file”, MPC:mpu=”MPC
-    # unnumbered asteroid orbit file”, MPC:mp1=”MPC single opposition
-    # short-arc orbit file”
-    "ignore": ["S0", "S0_sigma", "diameter", "diameter_sigma", "extent", "pole", "GM",
-               "density", "BV", "UB", "IR", "equinox", "epoch_mjd", "epoch_cal", "n",
-               "sigma_n", "tp_cal", "moid_ld", "producer"],
-    "aonly": ["H", "G", "pha", "BV", "UB", "IR", "spec_B", "spec_T", "H_sigma"],
-    "conly": ["prefix", "M1", "M2", "K1", "K2", "PC"],
-}
-SBDB_FIELDS["all"] = _ordered_subtract(SBDB_FIELDS["*"], SBDB_FIELDS["ignore"])
-SBDB_FIELDS["all_ast"] = _ordered_subtract(SBDB_FIELDS["all"], SBDB_FIELDS["conly"])
-SBDB_FIELDS["all_com"] = _ordered_subtract(SBDB_FIELDS["all"], SBDB_FIELDS["aonly"])
-SBDB_FIELDS_STR = {k: ",".join(v) for k, v in SBDB_FIELDS.items()}
+_SBDB_FIELDS = pd.read_csv(StringIO(
+    """column,ignore,aonly,conly,simple,dtype
+spkid,0,0,0,1,i
+full_name,0,0,0,0,s
+kind,0,0,0,0,s
+pdes,0,0,0,1,s
+name,0,0,0,0,s
+prefix,0,0,1,1,s
+neo,0,0,0,0,s
+pha,0,1,0,0,s
+sats,0,0,0,0,i
+H,0,1,0,1,f
+G,0,1,0,1,f
+M1,0,0,1,1,f
+M2,0,0,1,1,f
+K1,0,0,1,1,f
+K2,0,0,1,1,f
+PC,0,0,1,1,f
+S0,1,0,0,0,s
+S0_sigma,1,0,0,0,s
+diameter,1,0,0,0,f
+extent,1,0,0,0,s
+albedo,0,0,0,0,f
+rot_per,0,0,0,0,f
+pole,1,0,0,0,s
+GM,1,0,0,0,f
+density,1,0,0,0,f
+BV,1,1,0,0,f
+UB,1,1,0,0,f
+IR,1,1,0,0,f
+spec_B,0,1,0,0,s
+spec_T,0,1,0,0,s
+H_sigma,0,1,0,0,f
+diameter_sigma,1,0,0,0,f
+orbit_id,0,0,0,1,s
+epoch,0,0,0,1,f
+epoch_mjd,1,0,0,0,f
+epoch_cal,1,0,0,0,s
+equinox,1,0,0,0,s
+e,0,0,0,1,f
+a,0,0,0,0,f
+q,0,0,0,1,f
+i,0,0,0,1,f
+om,0,0,0,1,f
+w,0,0,0,1,f
+ma,0,0,0,0,f
+ad,0,0,0,0,f
+n,1,0,0,0,f
+tp,0,0,0,1,f
+tp_cal,1,0,0,0,s
+per,0,0,0,0,f
+per_y,0,0,0,0,f
+moid,0,0,0,0,f
+moid_ld,1,0,0,0,f
+moid_jup,0,0,0,0,f
+t_jup,0,0,0,0,f
+sigma_e,0,0,0,0,f
+sigma_a,0,0,0,0,f
+sigma_q,0,0,0,0,f
+sigma_i,0,0,0,0,f
+sigma_om,0,0,0,0,f
+sigma_w,0,0,0,0,f
+sigma_ma,0,0,0,0,f
+sigma_ad,0,0,0,0,f
+sigma_n,1,0,0,0,f
+sigma_tp,0,0,0,0,f
+sigma_per,0,0,0,0,f
+class,0,0,0,1,s
+source,0,0,0,0,s
+soln_date,0,0,0,1,s
+producer,1,0,0,0,s
+data_arc,0,0,0,0,i
+first_obs,0,0,0,0,s
+last_obs,0,0,0,0,s
+n_obs_used,0,0,0,0,i
+n_del_obs_used,0,0,0,0,i
+n_dop_obs_used,0,0,0,0,i
+pe_used,0,0,0,0,s
+sb_used,0,0,0,0,s
+condition_code,0,0,0,0,s
+rms,0,0,0,1,f
+two_body,0,0,0,1,s
+A1,0,0,0,1,f
+A1_sigma,0,0,0,1,f
+A2,0,0,0,1,f
+A2_sigma,0,0,0,1,f
+A3,0,0,0,1,f
+A3_sigma,0,0,0,1,f
+DT,0,0,0,1,f
+DT_sigma,0,0,0,1,f"""),
+    dtype={"column": str, "ignore": bool, "aonly": bool, "conly": bool, "simple": bool, "dtype": str}
+)
+_SBDB_FIELDS["dtype"] = _SBDB_FIELDS["dtype"].map({"i": int, "f": float, "s": str})
+# For details of each column: https://ssd-api.jpl.nasa.gov/doc/sbdb_query.html
+# I found saving columns in, e.g., int32, does not really help reducing memory/storage usage for parquet.
+
+SBDB_FIELDS = {}
+for _name, _query in zip(["*", "all", "ignore", "simple", "simple_ast", "simple_com", "all_ast", "all_com"],
+                         ["~ignore", "~ignore", "ignore", "simple", "simple & ~conly", "simple & ~aonly",
+                          "~ignore & ~conly", "~ignore & ~aonly"]):
+    _df = _SBDB_FIELDS.query(_query)
+    SBDB_FIELDS[_name] = {c: t for c, t in zip(_df["column"], _df["dtype"])}
 
 
 def download_jpl_de(dename="de440s", output=None, overwrite=False):
@@ -203,16 +243,16 @@ class SBDBQuery:
             List of fields to be output. If no fields are specified, only the
             count (number of records matching found) is output. Field names are
             **case-sensitive**.
-            Four convenient options are available: ``"all"``, ``"*"``,
-            ``"all_ast"``, and ``"all_com"`` for all fields without a few
-            fields that are essentially empty, literally all fields, and fields
-            related to asteroids and comets, respectively. They are available
-            via `spicetools.SBDB_FIELDS` in `list` type and
-            `spicetools.SBDB_FIELDS_STR` in comma-separated `str` type.
-            More specifically, ``"all"`` is ``"*"`` minus
-            ``spicetools.SBDB_FIELDS["ignore"]``. ``"all_ast"`` is ``"all"``
-            minus ``spicetools.SBDB_FIELDS["conly"]``. ``"all_com"`` is
-            ``"all"`` minus ``spicetools.SBDB_FIELDS["aonly"]``.
+
+            Some convenient options from ``SBDB_FIELDS`` are available ::
+
+              * ``"*"``: Every available field.
+              * ``"all"``: All fields except a few fields that are essentially
+                empty for most (almost all) objects.
+              * ``"simple"``: A few important fields for SPHEREx-SSO.
+              * ``"all_[ast/com]"``: Selected for asteroids or comets.
+              * ``"simple_[ast/com]"``: Selected for asteroids or comets.
+
             Default is ``"spkid"``.
 
         sort : str, optional
@@ -303,8 +343,13 @@ class SBDBQuery:
 
         else:
             try:
-                self.fields = SBDB_FIELDS[fields]
-                params["fields"] = SBDB_FIELDS_STR[fields]
+                self.fields = list(SBDB_FIELDS[fields].keys())
+                params["fields"] = ",".join(self.fields)
+                if isinstance(fields, str):
+                    if fields.endswith("ast"):
+                        sb_kind = "a"
+                    elif fields.endswith("com"):
+                        sb_kind = "c"
             except KeyError:
                 if not isinstance(fields, str):  # if list
                     try:
@@ -387,7 +432,31 @@ class SBDBQuery:
 
         self._params = params
 
-    def query(self, convert_df=True):
+    def query(self, output_parq=None, compression="gzip", sanitize_comet=False, col2kete=False, **kwargs):
+        """Query SBDB and return the DataFrame.
+
+        Parameters
+        ----------
+        output_parq : str, optional
+            If provided, save the DataFrame to a parquet file.
+
+        compression : str, optional
+            Compression method to use in parquet file.
+
+        sanitize_comet : bool, optional
+            If `True`, sanitize the comets DataFrame by dropping objects ::
+
+              * other than P/ or C/
+              * with no magnitude information (likely unreliable comets or long dead)
+              * with non-sensical solution date (likely very old records)
+              * derived only by two-body physics (likely unreliable)
+
+            Thus, the query should have had
+
+        kwargs : dict, optional
+            Additional keyword arguments to pass to `pd.DataFrame.to_parquet`.
+
+        """
         response = requests.get(self.base_url, params=self._params)
         if not response.ok:
             raise ValueError(f"Query failed: {response.text}")
@@ -396,15 +465,38 @@ class SBDBQuery:
         if (ver := data["signature"]["version"]) != "1.0":
             raise ValueError(f"Only ver 1.0 is supported but got {ver}")
 
-        if convert_df:
-            import pandas as pd
+        try:
             self.df = pd.DataFrame(data["data"], columns=data["fields"])
-            # reorder columns based on self.fields:
-            # self.df = self.df[self.fields]
-        else:
-            self.fields = data["fields"]
-            self.data = data["data"]
-        # self.df = pd.DataFrame(self.data, columns=self.fields)
+            for c in self.df.columns:
+                self.df[c] = self.df[c].astype(SBDB_FIELDS["*"][c])
+
+        except Exception as e:
+            raise ValueError(f"Failed to create DataFrame: {e}")
+
+        if sanitize_comet:
+            for col in ["prefix", "M1", "M2", "K1", "K2", "PC", "soln_date", "two_body"]:
+                if col not in self.df.columns:
+                    raise ValueError(f"Field `{col}` not in the query - cannot sanitize comets")
+
+            self.df = sanitize_comets(self.df)
+
+        if col2kete:
+            self.df = self.df.rename(columns={
+                "e": "ecc",
+                "i": "incl",
+                "q": "peri_dist",
+                "w": "peri_arg",
+                "tp": "peri_time",
+                "om": "lon_node",
+                "pdes": "desig",
+            })
+
+        if output_parq is not None:
+            self.df.to_parquet(
+                output_parq, compression=compression, index=False, **kwargs
+            )
+
+        return self.df
 
 
 class HorizonsSPKQuery:
@@ -472,3 +564,19 @@ class HorizonsSPKQuery:
             with open(self.output, "wb" if decode else "w") as f:
                 f.write(self.spk)
             # Logger.log(f"SPK data written to {self.output}")
+
+
+def sanitize_comets(df_comet):
+    """Sanitize the comets DataFrame."""
+    # Drop objects
+    # - other than P/ or C/
+    # - with no magnitude information (likely unreliable comets or long dead)
+    # - with non-sensical solution date (likely very old records)
+    # - derived only by two-body physics (likely unreliable)
+    _nanmags = pd.isna(df_comet[["M1", "M2", "K1", "K2", "PC"]].apply(pd.to_numeric, errors="coerce"))
+    return df_comet.loc[
+        (df_comet["prefix"].isin(["C", "P"]))
+        & ~np.all(_nanmags, axis=1)
+        & ~pd.isna(df_comet["soln_date"])
+        & (df_comet["two_body"] != "T")
+    ].copy().reset_index(drop=True)
