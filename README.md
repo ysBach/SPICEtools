@@ -1,7 +1,8 @@
 # SPICEtools
 Python package to do simple SPICE calculations for space missions.
 
-Originally developed for the SPHEREx mission, this tool calculates the precise location of all known solar system objects (SSOs) for the next several years, with an accuracy < 0.1 arcsec (assuming accurate orbital data). Internal tests confirmed that the original implementation of this method (by @ysBach), which uses SPICE toolkits with certain simplifying assumptions, can reproduce JPL Horizons calculations with a precision of ≲ 1 milli-arcsec for a few randomly selected asteroids observed from the WISE spacecraft (which is an expected accuracy for using SPICE). Additionally, the tool had to estimate crude fluxes for each object at any given time, aiding in the flagging of pixels and supporting other high-level sciences. The parts that were not specific for SPHEREx is decided to be located here. Therefore, this package is designed to be extensible for use with other missions.
+Originally developed for the SPHEREx mission since early 2024, and designed to collect some generally usable tools related to the SPICE toolkit. As of Oct 2024, the team decided to rely on [`kete`](https://github.com/Caltech-IPAC/kete) from the NEO Surveyor mission. Thus, this repo should be considered as an archive, and no serious further improvement is planned.
+
 
 Some tips & scripts are available in the `docs/` directory.
 
